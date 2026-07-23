@@ -1,54 +1,32 @@
-# 📈 Autonomous Financial Quant R&D & Scheduler Framework
+# 📈 Autonomous Financial Quant Agent-Led R&D Loop Guide
 
-본 프레임워크는 **주식, 암호화폐, 금융 시계열 R&D**에 특화된 자율 튜닝 루프 및 과적합 방화벽 패키지입니다.
-
-주기(예: 60초)마다 자율적으로 백테스트 시뮬레이션(`auto_tuner_loop.py`)을 돌려 알파 예측 점수, 변동성 리스크, 포트폴리오 비중을 튜닝하는 **60초 무인 퀀트 스케줄러(auto_tuner_scheduler.py)**를 기본 탑재하고 있습니다.
+본 프레임워크는 사용자가 파이썬 코드를 로컬에서 계속 켜두는 것이 아니라, **AI 에이전트(Antigravity)가 `schedule` 도구를 사용해 스스로 60초마다 깨어나 자율 퀀트 백테스트 시뮬레이션 및 알파 튜닝을 수행하는 에이전트 주도형 템플릿**입니다.
 
 ---
 
 ## 🛡️ 금융 퀀트 특화 4대 과적합 차단 규정 (AGENTS.md)
 
-이 프레임워크를 적용할 때, `.agents/AGENTS.md`에 아래 규정을 삽입하여 과적합과 데이터 누수를 강제로 감시합니다:
+이 프레임워크 적용 시, `.agents/AGENTS.md`에 아래 규정을 삽입하여 에이전트의 데이터 누수와 승률 착시를 차단해야 합니다:
 
-1. **승률 착시 경계 (Win Rate Cap)**: Win Rate > 85.0% 또는 Sharpe Ratio > 3.50 발생 시 미래 참조(Look-Ahead Bias)로 간주하고 즉시 하드 블록(Hard Block) 처리.
+1. **승률 착시 경계 (Win Rate Cap)**: Win Rate > 85.0% 또는 Sharpe Ratio > 3.50 발생 시 미래 참조로 간주하고 즉시 하드 블록.
 2. **MDD Zero 방화벽 (Zero Drawdown Block)**: Max Drawdown(MDD)이 0.0%인 경우 100% 미래 주가 선행 참조 착시로 간주하여 하드 블록.
-3. **현실적 거래 마찰 주입 (Realistic Frictions)**: 슬리피지(Slippage) 최소 10~20 bps 및 거래 수수료를 차감하여 성과 계산.
+3. **현실적 거래 마찰 주입 (Realistic Frictions)**: 슬리피지 최소 10~20 bps 및 거래 수수료를 차감하여 성과 계산.
 4. **Walk-Forward OOS 검증**: In-Sample 대비 Out-of-Sample 성과 보존율 70% 이상 필수 검증.
 
 ---
 
-## 📁 퀀트 프레임워크 패키지 구조
+## 🤖 AI 에이전트에게 60초 자율 퀀트 R&D 구동 지시하는 방법 (Prompting Guide)
 
-```text
-financial_quant_framework/
-├── .agents/
-│   └── AGENTS.md                  <-- [규정 주입] AGENTS_RULE_TEMPLATE.md 바탕으로 작성
-├── config/
-│   └── champion_version.json       <-- [자동 생성] 최고 퀀트 챔피언 메타데이터
-├── core/
-│   ├── base_interface.py           <-- 4단계 파이프라인 인터페이스 (Alpha, Risk, Controller, Execution)
-│   └── data_selector.py            <-- US/KR/Crypto 및 1D/1H/5M 해상도 멀티 데이터 셀렉터
-├── modules/
-│   ├── overfitting_detector.py     <-- PBO, OOS Decay, MDD Zero 5대 과적합 진단기
-│   └── version_manager.py          <-- Utility Score 기반 챔피언 승격기
-├── auto_tuner_scheduler.py         <-- ⏰ 60초 주기 무인 자율 백테스트/ R&D 스케줄러
-├── auto_tuner_loop.py              <-- 단일 가설 백테스트 및 튜닝 실행 스크립트
-└── main_pipeline.py                <-- 마스터 파이프라인 구동기
-```
+이 폴더를 새 프로젝트에 복사한 뒤, AI 에이전트에게 다음과 같이 채팅창에 입력하십시오:
+
+> **"이 폴더에 있는 템플릿을 기반으로 60초 자율 퀀트 R&D 스케줄러 루프를 돌려줘. 매 60초마다 `schedule` 도구를 사용해 대기하고, 깨어나면 `python auto_tuner_loop.py`를 직접 1회씩 실행하며 최적의 알파 및 가중치 조합을 지속적으로 탐색해줘."**
 
 ---
 
-## ⚡ 빠른 구동 3단계 (Quick Start)
+## 🔁 에이전트 자율 60초 루프 작동 매커니즘 (Agent Self-Loop Mechanism)
 
-### Step 1.
-`financial_quant_framework/` 폴더를 새 퀀트 프로젝트로 복사합니다.
-
-### Step 2.
-`.agents/AGENTS.md`에 필수 규정을 배치합니다.
-
-### Step 3.
-터미널에서 아래 명령어를 구동하여 무인 R&D 루프를 시작합니다:
-```bash
-python auto_tuner_scheduler.py
-```
-*(기본 주기는 60초로 설정되어 있으며, 코드 내 `interval_seconds` 파라미터로 자유롭게 조정할 수 있습니다.)*
+1. **가설 적용**: 에이전트가 알파 가설 코드 및 파라미터를 수정합니다.
+2. **코드 직접 실행**: 에이전트가 `run_command` 도구로 `python auto_tuner_loop.py`를 1회 실행하여 백테스트를 수행합니다.
+3. **과적합 검증 및 챔피언 승격**: 실행 결과를 분석하여 5대 과적합 방화벽(`overfitting_detector.py`)을 통과하고 성능이 향상되면 챔피언 버전으로 승격시킵니다.
+4. **60초 자율 대기**: 에이전트가 스스로 `schedule(DurationSeconds=60)` 도구를 호출하여 타이머를 세팅하고 잠에 듭니다.
+5. **무한 순환**: 60초 후 시스템에 의해 에이전트가 깨어나면 다시 **1단계**부터 루프를 반복 구동합니다.
