@@ -12,7 +12,7 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
 class UniversalAutonomousRNDLoop:
-    """Domain-Agnostic Autonomous AI R&D Loop."""
+    """Domain-Agnostic Autonomous AI R&D Loop with Failure Logging."""
     
     def __init__(self, workspace_path=None):
         self.workspace_path = workspace_path or os.path.dirname(os.path.abspath(__file__))
@@ -34,14 +34,18 @@ class UniversalAutonomousRNDLoop:
             "pbo": 0.095
         }
 
+        # 1. Evaluate Leakage & Overfitting Safeguards
         diag = self.detector.evaluate_model_validity(cand_metrics)
         if diag["is_invalid"]:
             print(f" 🛑 [HARD BLOCK TRIGGERED] Candidate {cand_metrics['model_id']} REJECTED!")
             print(f"    Reasons: {diag['hard_block_reasons']}")
+            # 🚨 [CRITICAL] Log the failed run to ensure history preservation and prevent duplicate mistakes!
+            self.tracker.log_experiment_history(cand_metrics, status="REJECTED", block_reasons=diag["hard_block_reasons"])
             return False
         else:
             print(f" ✅ [AGENTS.md UNIVERSAL RULE PASSED] Candidate {cand_metrics['model_id']} Validated.")
 
+        # 2. Evaluate Promotion
         promoted = self.tracker.evaluate_and_promote(cand_metrics)
         print("=" * 80 + "\n")
         return promoted
