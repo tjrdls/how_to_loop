@@ -1,0 +1,8 @@
+{
+  "project_name": "UNIVERSAL_AI_PROJECT",
+  "objective_metric_name": "primary_accuracy",
+  "max_metric_upper_cap": 0.9500,
+  "min_oos_decay_ratio": 0.70,
+  "max_pbo_probability": 0.25,
+  "environment_friction_ratio": 0.002
+}
