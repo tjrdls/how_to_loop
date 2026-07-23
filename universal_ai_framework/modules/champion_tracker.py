@@ -8,14 +8,14 @@ if hasattr(sys.stdout, 'reconfigure'):
 
 class DomainAgnosticChampionTracker:
     """
-    Domain-Agnostic Champion Model & History Tracker.
-    Calculates Composite Utility Score, promotes champions, and saves ALL (success/rejected) history.
+    Domain-Agnostic Champion Model & Markdown History Tracker.
+    Saves trial results (including failures and hard blocks) exclusively in markdown files
+    to prevent duplicate exploration and remain aligned with Obsidian Knowledge Base standards.
     """
     
     def __init__(self, workspace_path=None):
         self.workspace_path = workspace_path or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.config_path = os.path.join(self.workspace_path, "config/champion_model.json")
-        self.history_path = os.path.join(self.workspace_path, "config/experiment_history.json")
         self.leaderboard_path = os.path.join(self.workspace_path, "Notes/Model_Leaderboard.md")
 
     def calculate_utility_score(self, metrics):
@@ -25,15 +25,8 @@ class DomainAgnosticChampionTracker:
         return round(score, 4)
 
     def log_experiment_history(self, candidate_exp, status="SUCCESS", block_reasons=None):
-        """Saves ALL trial results (including failures and hard blocks) to prevent duplicated mistakes."""
-        history = []
-        if os.path.exists(self.history_path):
-            try:
-                with open(self.history_path, "r", encoding="utf-8") as f:
-                    history = json.load(f)
-            except Exception:
-                pass
-
+        """Saves trial results directly to the Markdown leaderboard and individual experiment notes."""
+        utility = self.calculate_utility_score(candidate_exp)
         trial_data = {
             "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             "model_id": candidate_exp.get("model_id", "MODEL_UNKNOWN"),
@@ -41,21 +34,19 @@ class DomainAgnosticChampionTracker:
             "status": status,
             "reasons": block_reasons or [],
             "metrics": candidate_exp,
-            "utility_score": self.calculate_utility_score(candidate_exp)
+            "utility_score": utility
         }
-        history.append(trial_data)
 
-        os.makedirs(os.path.dirname(self.history_path), exist_ok=True)
-        with open(self.history_path, "w", encoding="utf-8") as f:
-            json.dump(history, f, indent=2, ensure_ascii=False)
-
+        # 1. Update Master Markdown Leaderboard
         self._update_markdown_leaderboard(trial_data)
+        
+        # 2. Write Individual Experiment Note
+        self._write_individual_experiment_note(trial_data)
 
     def _update_markdown_leaderboard(self, trial):
         """Appends the success/failure status dynamically to the Obsidian markdown leaderboard."""
         os.makedirs(os.path.dirname(self.leaderboard_path), exist_ok=True)
         
-        # Create file with table header if not exists
         if not os.path.exists(self.leaderboard_path):
             header = """# 📊 Model Exploration History & Leaderboard
 
@@ -74,6 +65,41 @@ This file tracks ALL historical runs (including successful promotions and reject
         
         with open(self.leaderboard_path, "a", encoding="utf-8") as f:
             f.write(row)
+
+    def _write_individual_experiment_note(self, trial):
+        """Generates an individual markdown file inside Notes/ directory for Obsidian lookup."""
+        notes_dir = os.path.join(self.workspace_path, "Notes")
+        os.makedirs(notes_dir, exist_ok=True)
+        note_path = os.path.join(notes_dir, f"{trial['model_id']}.md")
+
+        status_str = "🏆 CHAMPION" if trial["status"] == "CHAMPION" else ("✅ VALIDATED" if trial["status"] == "SUCCESS" else "❌ REJECTED")
+        reasons_str = "\n".join([f"- {r}" for r in trial["reasons"]]) if trial["reasons"] else "None"
+
+        note_content = f"""---
+aliases: [{trial['model_id']}, {trial['name']}]
+tags:
+  - model/trial
+  - status/{trial['status'].lower()}
+---
+
+# 📝 Model Trial Record: {trial['model_id']}
+
+- **Hypothesis Name**: {trial['name']}
+- **Run Timestamp**: {trial['timestamp']}
+- **Execution Status**: **{status_str}**
+- **Calculated Utility Score**: {trial['utility_score']}
+
+## 📊 Performance Metrics
+- **Primary Metric**: {trial['metrics'].get('primary_accuracy', 0.0)}
+- **R2 Score**: {trial['metrics'].get('r2_score', 0.0)}
+- **OOS Performance Decay**: {trial['metrics'].get('oos_decay', 0.0)}
+- **Probability of Overfitting (PBO)**: {trial['metrics'].get('pbo', 0.0)}
+
+## 🛡️ Anti-Overfitting Hard Block Reasons
+{reasons_str}
+"""
+        with open(note_path, "w", encoding="utf-8") as f:
+            f.write(note_content)
 
     def evaluate_and_promote(self, candidate_exp):
         current_champ = {"utility_score": 0.0}

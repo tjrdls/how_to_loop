@@ -8,14 +8,14 @@ if hasattr(sys.stdout, 'reconfigure'):
 
 class ChampionVersionManager:
     """
-    Champion Version & Experiment History Manager.
-    Logs both successful promotions and rejected overfitted trials to ensure full traceback.
+    Champion Version & Markdown Experiment History Manager.
+    Logs successful champions, validated candidates, and rejected overfitted trials
+    exclusively in markdown format to prevent duplicate failures in Obsidian.
     """
     
     def __init__(self, workspace_path=None):
         self.workspace_path = workspace_path or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.config_path = os.path.join(self.workspace_path, "config/champion_version.json")
-        self.history_path = os.path.join(self.workspace_path, "config/quant_history.json")
         self.leaderboard_path = os.path.join(self.workspace_path, "Notes/Experiment_Leaderboard.md")
 
     def calculate_composite_utility(self, sharpe, ann_return, mdd, win_rate):
@@ -23,18 +23,10 @@ class ChampionVersionManager:
         return round(score, 4)
 
     def log_experiment_history(self, candidate_exp, status="SUCCESS", block_reasons=None):
-        """Saves both successful promotions and rejected/failed runs to preserve historical intelligence."""
-        history = []
-        if os.path.exists(self.history_path):
-            try:
-                with open(self.history_path, "r", encoding="utf-8") as f:
-                    history = json.load(f)
-            except Exception:
-                pass
-
+        """Saves backtest trials directly to the Markdown leaderboard and individual notes."""
         utility = self.calculate_composite_utility(
             candidate_exp.get("sharpe", 0.0),
-            candidate_exp.get("ann_return", candidate_exp.get("ann_return", 0.0)),
+            candidate_exp.get("ann_return", 0.0),
             candidate_exp.get("mdd", 0.0),
             candidate_exp.get("win_rate", 0.0)
         )
@@ -48,13 +40,12 @@ class ChampionVersionManager:
             "metrics": candidate_exp,
             "utility_score": utility
         }
-        history.append(trial_data)
 
-        os.makedirs(os.path.dirname(self.history_path), exist_ok=True)
-        with open(self.history_path, "w", encoding="utf-8") as f:
-            json.dump(history, f, indent=2, ensure_ascii=False)
-
+        # 1. Update Master Markdown Leaderboard
         self._update_markdown_leaderboard(trial_data)
+        
+        # 2. Write Individual Experiment Note
+        self._write_individual_experiment_note(trial_data)
 
     def _update_markdown_leaderboard(self, trial):
         """Appends the run dynamically to the Experiment Leaderboard markdown table."""
@@ -75,10 +66,48 @@ Tracks all historical backtests including champions and rejected look-ahead/over
         reasons_str = ", ".join(trial["reasons"]) if trial["reasons"] else "-"
         m = trial["metrics"]
 
-        row = f"| {trial['timestamp']} | **{trial['exp_id']}** | {trial['name']} | {status_str} | {trial['utility_score']} | {m.get('sharpe', 0.0):.2f} | {m.get('ann_return', m.get('ann_return', 0.0))*100:.1f}% | {m.get('mdd', 0.0)*100:.2f}% | {m.get('win_rate', 0.0)*100:.1f}% | {reasons_str} |\n"
+        row = f"| {trial['timestamp']} | **{trial['exp_id']}** | {trial['name']} | {status_str} | {trial['utility_score']} | {m.get('sharpe', 0.0):.2f} | {m.get('ann_return', 0.0)*100:.1f}% | {m.get('mdd', 0.0)*100:.2f}% | {m.get('win_rate', 0.0)*100:.1f}% | {reasons_str} |\n"
         
         with open(self.leaderboard_path, "a", encoding="utf-8") as f:
             f.write(row)
+
+    def _write_individual_experiment_note(self, trial):
+        """Generates an individual markdown file inside Notes/ directory for Obsidian lookup."""
+        notes_dir = os.path.join(self.workspace_path, "Notes")
+        os.makedirs(notes_dir, exist_ok=True)
+        note_path = os.path.join(notes_dir, f"{trial['exp_id']}.md")
+
+        status_str = "🏆 CHAMPION" if trial["status"] == "CHAMPION" else ("✅ VALIDATED" if trial["status"] == "SUCCESS" else "❌ REJECTED")
+        reasons_str = "\n".join([f"- {r}" for r in trial["reasons"]]) if trial["reasons"] else "None"
+        m = trial["metrics"]
+
+        note_content = f"""---
+aliases: [{trial['exp_id']}, {trial['name']}]
+tags:
+  - quant/experiment
+  - status/{trial['status'].lower()}
+---
+
+# 📝 Quant Experiment Record: {trial['exp_id']}
+
+- **Hypothesis Name**: {trial['name']}
+- **Run Timestamp**: {trial['timestamp']}
+- **Execution Status**: **{status_str}**
+- **Calculated Utility Score**: {trial['utility_score']}
+
+## 📊 Backtest Performance Metrics
+- **Sharpe Ratio**: {m.get('sharpe', 0.0):.2f}
+- **Annualized Return (CAGR)**: {m.get('ann_return', 0.0)*100:.2f}%
+- **Max Drawdown (MDD)**: {m.get('mdd', 0.0)*100:.2f}%
+- **Win Rate**: {m.get('win_rate', 0.0)*100:.1f}%
+- **OOS Performance Decay**: {m.get('oos_decay', 0.0)}
+- **Probability of Overfitting (PBO)**: {m.get('pbo', 0.0)}
+
+## 🛡️ Anti-Overfitting Hard Block Reasons
+{reasons_str}
+"""
+        with open(note_path, "w", encoding="utf-8") as f:
+            f.write(note_content)
 
     def evaluate_and_promote(self, candidate_exp):
         current_champ = {"utility_score": 0.0}
